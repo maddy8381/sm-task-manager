@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Task Board
 
-## Getting Started
+A personal, Jira-style weekly kanban board. Three status columns (To Do / In
+Progress / Done), each split into Mon–Sun day-sections with today pinned to
+the top. When a week ends, unfinished tasks roll forward into the new week
+automatically, and finished weeks become permanent, browsable archives under
+`/archive`.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router, TypeScript, Tailwind v4)
+- Prisma 7 + Postgres (via `@prisma/adapter-pg`)
+- `@dnd-kit` for drag-and-drop between day-sections/columns
+- No auth — this is meant for a single user
+
+## 1. Get a Postgres database
+
+Use a free hosted Postgres instance — [Neon](https://neon.tech) or
+[Supabase](https://supabase.com) both work. Create a project and copy the
+connection string (it should look like
+`postgresql://user:password@host/db?sslmode=require`).
+
+## 2. Configure environment variables
+
+Copy `.env.example` to `.env` and fill in `DATABASE_URL`:
+
+```bash
+cp .env.example .env
+```
+
+## 3. Install dependencies and create the schema
+
+```bash
+npm install
+npx prisma migrate dev --name init
+```
+
+This creates the `Task` table and generates the Prisma client into
+`src/generated/prisma` (already gitignored).
+
+## 4. Run it
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How the weekly rollover works
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+There's no cron job. Every time the board loads, the server compares each
+task's stored week against the current week (computed from the date your
+browser reports, not the server's, so day boundaries match your local
+midnight). Any task not marked Done that belongs to a past week is pulled
+forward into today's section of the current week. Done tasks are left where
+they are, which is what makes a past week's archive permanent — visit
+`/archive` to browse every completed week by date range.
 
-## Learn More
+## Project structure
 
-To learn more about Next.js, take a look at the following resources:
+- `prisma/schema.prisma` — the `Task` model (title, description, status, day, weekStart)
+- `src/lib/week.ts` — UTC-safe calendar-date math shared by client and server
+- `src/lib/rollover.ts` — the lazy week-rollover logic described above
+- `src/app/api/tasks`, `src/app/api/weeks` — REST-ish route handlers
+- `src/components/Board.tsx` — the interactive current-week board
+- `src/app/archive/**` — read-only history of past weeks
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploying
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Push to a Git repo and import it on [Vercel](https://vercel.com/new), setting
+`DATABASE_URL` as an environment variable there too. No other config needed.
