@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { LogoutButton } from "@/components/LogoutButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { fetchWeeks } from "@/lib/api";
 import { formatWeekLabel, localTodayString, parseCalendarDateString } from "@/lib/week";
@@ -45,6 +46,7 @@ function ArchiveView({ slug, workspace }: { slug: string; workspace: WorkspaceVa
           >
             Back to board
           </Link>
+          <LogoutButton />
         </div>
       </div>
 

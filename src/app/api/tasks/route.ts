@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth-request";
 import { rolloverStaleTasks } from "@/lib/rollover";
 import { parseCalendarDateString, toCalendarDateString } from "@/lib/week";
 import { serializeTask } from "@/lib/serialize";
@@ -23,6 +24,11 @@ function parseWorkspaceParam(request: NextRequest): Workspace | null {
 }
 
 export async function GET(request: NextRequest) {
+  const user = await getCurrentUser(request);
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const today = parseTodayParam(request);
   if (!today) {
     return NextResponse.json({ error: "Missing or invalid 'today' query param (yyyy-MM-dd)" }, { status: 400 });
@@ -32,15 +38,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing or invalid 'workspace' query param" }, { status: 400 });
   }
 
-  const { currentWeekStart, rolledOver } = await rolloverStaleTasks(today);
+  const { currentWeekStart, rolledOver } = await rolloverStaleTasks(today, user.id, workspace);
 
   const [tasks, backlogTasks] = await Promise.all([
     prisma.task.findMany({
-      where: { weekStart: currentWeekStart, workspace },
+      where: { userId: user.id, weekStart: currentWeekStart, workspace },
       orderBy: { createdAt: "asc" },
     }),
     prisma.task.findMany({
-      where: { workspace, day: null },
+      where: { userId: user.id, workspace, day: null },
       orderBy: { createdAt: "asc" },
     }),
   ]);
@@ -53,6 +59,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const user = await getCurrentUser(request);
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
@@ -97,6 +108,7 @@ export async function POST(request: NextRequest) {
 
   const task = await prisma.task.create({
     data: {
+      userId: user.id,
       title: title.trim(),
       description: typeof description === "string" && description.trim() ? description.trim() : null,
       status: effectiveStatus,

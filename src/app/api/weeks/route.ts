@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth-request";
 import { getWeekStart, parseCalendarDateString, toCalendarDateString } from "@/lib/week";
 import { VALID_WORKSPACES } from "@/lib/task-input";
 import { Workspace } from "@/generated/prisma/client";
 
 export async function GET(request: NextRequest) {
+  const user = await getCurrentUser(request);
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const todayParam = request.nextUrl.searchParams.get("today");
   if (!todayParam) {
     return NextResponse.json({ error: "Missing 'today' query param (yyyy-MM-dd)" }, { status: 400 });
@@ -25,7 +31,7 @@ export async function GET(request: NextRequest) {
   const currentWeekStart = getWeekStart(today);
 
   const rows = await prisma.task.findMany({
-    where: { weekStart: { lt: currentWeekStart }, workspace },
+    where: { userId: user.id, weekStart: { lt: currentWeekStart }, workspace },
     select: { weekStart: true, status: true },
   });
 

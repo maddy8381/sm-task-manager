@@ -20,13 +20,20 @@ into the Backlog) whenever you're ready to schedule it. Backlog is To Do
 only; it's not part of any week, so it never rolls over and never gets
 archived — it just sits there until you give it a day.
 
+The whole app sits behind a lightweight **sign-up/log-in** gate — email +
+password, plus a name at signup. On success the session token is stashed in
+`localStorage`, so the same browser skips straight back into the app on the
+next visit; a different browser (or a cleared one) gets asked to log in
+again. There's a "Log out" link in every header if you want to clear it
+manually.
+
 ## Stack
 
 - Next.js 16 (App Router, TypeScript, Tailwind v4)
 - Prisma 7 + Postgres (via `@prisma/adapter-pg`)
 - TanStack Query for client-side data caching (instant tab switches)
 - `@dnd-kit` for drag-and-drop between day-sections/columns/backlog
-- No auth — this is meant for a single user
+- `bcryptjs` for password hashing — one account gate, not a full multi-tenant auth system
 
 ## 1. Get a Postgres database
 
@@ -163,11 +170,40 @@ The `day` and `weekStart` fields are kept in sync server-side (whenever you crea
 
 `day`/`weekStart` are nullable together — that's how a task ends up in the Backlog. A `null` `weekStart` never matches `weekStart: { lt: currentWeekStart }` in Postgres, so Backlog tasks are automatically excluded from rollover and from the past-week archive; they just persist until someone (or a drag) gives them a real day. The one invariant the API enforces on both `POST` and `PATCH`: a task can only have `day: null` while its `status` is `TODO` — trying to set it to In Progress or Done without a day (or the other way around) is a 400.
 
-`workspace` is what makes Job and Personal separate boards — it's just another column on the same `Task` table. Every query (current week, archive list, archived week) filters on it, so a `GET /api/tasks` always takes `?workspace=JOB|PERSONAL` alongside `?today=`. The frontend routes (`/job`, `/personal`) map to it via `src/lib/workspace.ts` (`parseWorkspaceSlug`), and `<Board workspace="JOB" />` is what threads it through the UI. There's no cross-workspace query anywhere — rollover, archiving, and the board fetch all scope to one workspace at a time.
+`workspace` is what makes Job and Personal separate boards *within one account* — it's just another column on the same `Task` table, alongside `userId` (see below). Every query (current week, archive list, archived week) filters on both, so a `GET /api/tasks` always takes `?workspace=JOB|PERSONAL` alongside `?today=` and the authenticated user resolved from the request. The frontend routes (`/job`, `/personal`) map the slug to the enum via `src/lib/workspace.ts` (`parseWorkspaceSlug`), and `<Board workspace="JOB" />` threads it through the UI. There's no cross-workspace *or* cross-account query anywhere — rollover, archiving, and the board fetch all scope to one user's one workspace at a time.
 
-### Why No Auth?
+### Auth & per-user data
 
-This is a single-user personal tool. If you ever want to share it or deploy it publicly, adding auth is straightforward: just add a session check at the top of each API route (e.g., via a `auth.ts` middleware that reads a cookie). For now, treat the URL as the secret.
+Real multi-user separation, not just a lock screen: every `Task` belongs to exactly one `User` via `userId`, and every task/week route resolves the requester from their bearer token first and filters (or writes) with that `userId` before touching anything else. Two accounts on the same deployment never see each other's tasks, even within the same workspace name.
+
+```
+User {
+  id: string (cuid)
+  name: string
+  email: string (unique)
+  passwordHash: string (bcrypt)
+  sessionToken: string | null (unique; set on login/signup, cleared on logout)
+  createdAt: DateTime
+}
+
+Task {
+  ...
+  userId: string  // FK -> User.id, onDelete: Cascade
+}
+```
+
+- `src/lib/auth-server.ts` — `hashPassword`/`verifyPassword` (bcryptjs), `generateToken` (`crypto.randomUUID()`), and `getBearerToken` to pull the token off an `Authorization: Bearer` header.
+- `src/lib/auth-request.ts` — `getCurrentUser(request)`: resolves the bearer token to the account holding it (via `sessionToken`), or `null`. Every task/week route calls this first and 401s if it comes back empty — nothing in `/api/tasks*` or `/api/weeks*` runs unauthenticated.
+- `src/app/api/auth/signup/route.ts`, `.../login/route.ts` — validate input, hash/verify the password, stamp a fresh `sessionToken` onto the row, return `{ user, token }`.
+- `src/app/api/auth/me/route.ts` — thin wrapper around `getCurrentUser`. This is what turns "a token sitting in localStorage" into "an actual logged-in user" on every page load.
+- `src/app/api/auth/logout/route.ts` — clears `sessionToken` server-side so a stolen/old token stops working, not just a client-side forget.
+- `src/app/api/tasks/route.ts`, `.../[id]/route.ts`, `src/app/api/weeks*` — every read filters `where: { userId: user.id, ... }`; every write (`create`) stamps `userId: user.id`; every single-task `PATCH`/`DELETE` first does a `findFirst({ id, userId })` so a task belonging to someone else 404s instead of leaking that the id exists.
+- `src/lib/rollover.ts` — `rolloverStaleTasks(today, userId, workspace)` is scoped the same way, so one account's board load can never roll another account's stale tasks forward.
+- `src/lib/api.ts` — the client HTTP wrapper attaches `Authorization: Bearer <token>` (from `getStoredToken()`) to every task/week request, and treats any `401` as "the session is no longer valid": it clears the stored token and reloads, which drops you back at the login screen via `AuthGate`.
+- `src/components/AuthGate.tsx` — wraps the whole app (`src/app/providers.tsx`). On mount: no stored token → show `AuthForm` immediately; stored token → call `/api/auth/me` to confirm it's still valid before rendering children.
+- `src/lib/auth-context.tsx` + `src/components/LogoutButton.tsx` — the authenticated user and a `logout()` are exposed via context so any page (including the archive-week page, which fetches client-side through the same scoped `/api/weeks/[weekStart]` route rather than querying Prisma directly) can offer a way to sign out without threading props through every layout.
+
+One deliberate limitation: `workspace` (Job/Personal) is still just a label on `Task`, shared vocabulary across every account rather than something users configure — everyone's board is split into the same two workspaces, they just each have their own Job and their own Personal.
 
 ## Project structure
 

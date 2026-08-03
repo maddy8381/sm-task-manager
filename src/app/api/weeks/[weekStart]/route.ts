@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth-request";
 import { parseCalendarDateString } from "@/lib/week";
 import { serializeTask } from "@/lib/serialize";
 import { VALID_WORKSPACES } from "@/lib/task-input";
 import { Workspace } from "@/generated/prisma/client";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ weekStart: string }> }) {
+  const user = await getCurrentUser(request);
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const { weekStart } = await params;
 
   const workspaceParam = request.nextUrl.searchParams.get("workspace");
@@ -22,7 +28,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const tasks = await prisma.task.findMany({
-    where: { weekStart: weekStartDate, workspace },
+    where: { userId: user.id, weekStart: weekStartDate, workspace },
     orderBy: { createdAt: "asc" },
   });
 

@@ -13,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 import Link from "next/link";
 import { Column } from "@/components/Column";
+import { LogoutButton } from "@/components/LogoutButton";
 import { TaskCard } from "@/components/TaskCard";
 import { TaskModal, type TaskFormValues } from "@/components/TaskModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -210,6 +211,7 @@ export function Board({ workspace }: { workspace: WorkspaceValue }) {
           >
             Archive
           </Link>
+          <LogoutButton />
           <button
             type="button"
             onClick={() => today && setModal({ mode: "create", status: "TODO", day: today })}

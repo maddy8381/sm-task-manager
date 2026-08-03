@@ -29,6 +29,22 @@ enum Workspace {
   PERSONAL
 }
 
+model User {
+  id           String  @id @default(cuid())
+  name         String
+  email        String  @unique
+  passwordHash String
+  // Set on login/signup, cleared on logout. Whoever holds this token in
+  // localStorage is treated as signed in — the whole point of "local
+  // storage based" auto-login. One active session at a time is fine for a
+  // single-user personal tool.
+  sessionToken String? @unique
+
+  createdAt DateTime @default(now())
+
+  tasks Task[]
+}
+
 model Task {
   id          String       @id @default(cuid())
   title       String
@@ -37,8 +53,13 @@ model Task {
   priority    TaskPriority @default(MEDIUM)
   labels      String[]     @default([])
 
+  // Every task belongs to exactly one account — this is what makes tasks
+  // private per user instead of shared across whoever's logged in.
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Which board this task belongs to. Job and Personal are fully separate
-  // boards/archives — this field is the only thing that partitions them.
+  // boards/archives within a single account.
   workspace Workspace @default(JOB)
 
   // The specific calendar date this task is assigned to (day-section on the board).
@@ -54,6 +75,6 @@ model Task {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([workspace, weekStart, status])
-  @@index([day])
+  @@index([userId, workspace, weekStart, status])
+  @@index([userId, day])
 }

@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth-request";
 import { serializeTask } from "@/lib/serialize";
 import { normalizeLabels, parseDayField, VALID_PRIORITIES, VALID_STATUSES } from "@/lib/task-input";
 import { TaskPriority, TaskStatus } from "@/generated/prisma/client";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getCurrentUser(request);
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const { id } = await params;
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") {
@@ -13,7 +19,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
   const input = body as Record<string, unknown>;
 
-  const current = await prisma.task.findUnique({ where: { id } });
+  // Scope the lookup to this user too — a task belonging to someone else
+  // should read as "not found", not leak that the id exists.
+  const current = await prisma.task.findFirst({ where: { id, userId: user.id } });
   if (!current) {
     return NextResponse.json({ error: "task not found" }, { status: 404 });
   }
@@ -91,8 +99,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getCurrentUser(request);
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const { id } = await params;
+  const existing = await prisma.task.findFirst({ where: { id, userId: user.id } });
+  if (!existing) {
+    return NextResponse.json({ error: "task not found" }, { status: 404 });
+  }
+
   try {
     await prisma.task.delete({ where: { id } });
     return new NextResponse(null, { status: 204 });
