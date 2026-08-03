@@ -1,4 +1,4 @@
-import type { Task, TaskPriorityValue, TaskStatusValue } from "@/types";
+import type { Task, TaskPriorityValue, TaskStatusValue, WorkspaceValue } from "@/types";
 
 async function unwrap<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -9,9 +9,10 @@ async function unwrap<T>(res: Response): Promise<T> {
 }
 
 export async function fetchCurrentWeek(
-  today: string
+  today: string,
+  workspace: WorkspaceValue
 ): Promise<{ weekStart: string; rolledOver: number; tasks: Task[] }> {
-  const res = await fetch(`/api/tasks?today=${today}`);
+  const res = await fetch(`/api/tasks?today=${today}&workspace=${workspace}`);
   return unwrap(res);
 }
 
@@ -21,6 +22,7 @@ export async function createTask(input: {
   status: TaskStatusValue;
   priority: TaskPriorityValue;
   labels: string[];
+  workspace: WorkspaceValue;
   day: string;
 }): Promise<Task> {
   const res = await fetch("/api/tasks", {
@@ -59,13 +61,17 @@ export async function deleteTask(id: string): Promise<void> {
 }
 
 export async function fetchWeeks(
-  today: string
+  today: string,
+  workspace: WorkspaceValue
 ): Promise<{ weeks: { weekStart: string; total: number; done: number }[] }> {
-  const res = await fetch(`/api/weeks?today=${today}`);
+  const res = await fetch(`/api/weeks?today=${today}&workspace=${workspace}`);
   return unwrap(res);
 }
 
-export async function fetchWeek(weekStart: string): Promise<{ weekStart: string; tasks: Task[] }> {
-  const res = await fetch(`/api/weeks/${weekStart}`);
+export async function fetchWeek(
+  weekStart: string,
+  workspace: WorkspaceValue
+): Promise<{ weekStart: string; tasks: Task[] }> {
+  const res = await fetch(`/api/weeks/${weekStart}?workspace=${workspace}`);
   return unwrap(res);
 }

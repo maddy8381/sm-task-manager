@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { rolloverStaleTasks } from "@/lib/rollover";
 import { getWeekStart, parseCalendarDateString, toCalendarDateString } from "@/lib/week";
 import { serializeTask } from "@/lib/serialize";
-import { normalizeLabels, VALID_PRIORITIES, VALID_STATUSES } from "@/lib/task-input";
-import { TaskPriority, TaskStatus } from "@/generated/prisma/client";
+import { normalizeLabels, VALID_PRIORITIES, VALID_STATUSES, VALID_WORKSPACES } from "@/lib/task-input";
+import { TaskPriority, TaskStatus, Workspace } from "@/generated/prisma/client";
 
 function parseTodayParam(request: NextRequest): Date | null {
   const todayParam = request.nextUrl.searchParams.get("today");
@@ -16,16 +16,26 @@ function parseTodayParam(request: NextRequest): Date | null {
   }
 }
 
+function parseWorkspaceParam(request: NextRequest): Workspace | null {
+  const workspace = request.nextUrl.searchParams.get("workspace");
+  if (!workspace || !VALID_WORKSPACES.includes(workspace)) return null;
+  return workspace as Workspace;
+}
+
 export async function GET(request: NextRequest) {
   const today = parseTodayParam(request);
   if (!today) {
     return NextResponse.json({ error: "Missing or invalid 'today' query param (yyyy-MM-dd)" }, { status: 400 });
   }
+  const workspace = parseWorkspaceParam(request);
+  if (!workspace) {
+    return NextResponse.json({ error: "Missing or invalid 'workspace' query param" }, { status: 400 });
+  }
 
   const { currentWeekStart, rolledOver } = await rolloverStaleTasks(today);
 
   const tasks = await prisma.task.findMany({
-    where: { weekStart: currentWeekStart },
+    where: { weekStart: currentWeekStart, workspace },
     orderBy: { createdAt: "asc" },
   });
 
@@ -42,13 +52,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { title, description, status, priority, labels, day } = body as Record<string, unknown>;
+  const { title, description, status, priority, labels, workspace, day } = body as Record<string, unknown>;
 
   if (typeof title !== "string" || !title.trim()) {
     return NextResponse.json({ error: "title is required" }, { status: 400 });
   }
   if (typeof day !== "string") {
     return NextResponse.json({ error: "day is required (yyyy-MM-dd)" }, { status: 400 });
+  }
+  if (typeof workspace !== "string" || !VALID_WORKSPACES.includes(workspace)) {
+    return NextResponse.json({ error: "invalid workspace" }, { status: 400 });
   }
   if (status !== undefined && !VALID_STATUSES.includes(status as string)) {
     return NextResponse.json({ error: "invalid status" }, { status: 400 });
@@ -75,6 +88,7 @@ export async function POST(request: NextRequest) {
       status: (status as TaskStatus) ?? TaskStatus.TODO,
       priority: (priority as TaskPriority) ?? TaskPriority.MEDIUM,
       labels: normalizedLabels,
+      workspace: workspace as Workspace,
       day: dayDate,
       weekStart: getWeekStart(dayDate),
     },

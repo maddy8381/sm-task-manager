@@ -24,6 +24,11 @@ enum TaskPriority {
   HIGH
 }
 
+enum Workspace {
+  JOB
+  PERSONAL
+}
+
 model Task {
   id          String       @id @default(cuid())
   title       String
@@ -31,6 +36,10 @@ model Task {
   status      TaskStatus   @default(TODO)
   priority    TaskPriority @default(MEDIUM)
   labels      String[]     @default([])
+
+  // Which board this task belongs to. Job and Personal are fully separate
+  // boards/archives — this field is the only thing that partitions them.
+  workspace Workspace @default(JOB)
 
   // The specific calendar date this task is assigned to (day-section on the board).
   day DateTime @db.Date
@@ -42,6 +51,6 @@ model Task {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([weekStart, status])
+  @@index([workspace, weekStart, status])
   @@index([day])
 }

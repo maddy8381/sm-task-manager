@@ -24,14 +24,15 @@ import {
   parseCalendarDateString,
   toCalendarDateString,
 } from "@/lib/week";
-import { STATUS_COLUMNS, type Task, type TaskStatusValue } from "@/types";
+import { WORKSPACE_TO_SLUG } from "@/lib/workspace";
+import { STATUS_COLUMNS, WORKSPACES, type Task, type TaskStatusValue, type WorkspaceValue } from "@/types";
 
 type ModalState =
   | { mode: "create"; status: TaskStatusValue; day: string }
   | { mode: "edit"; task: Task }
   | null;
 
-export function Board() {
+export function Board({ workspace }: { workspace: WorkspaceValue }) {
   const [today, setToday] = useState<string | null>(null);
   const [weekStart, setWeekStart] = useState<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -43,7 +44,7 @@ export function Board() {
 
   useEffect(() => {
     const t = localTodayString();
-    fetchCurrentWeek(t)
+    fetchCurrentWeek(t, workspace)
       .then((res) => {
         setToday(t);
         setWeekStart(res.weekStart);
@@ -52,7 +53,7 @@ export function Board() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [workspace]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -110,6 +111,7 @@ export function Board() {
       status: values.status,
       priority: values.priority,
       labels: values.labels,
+      workspace,
       day: values.day,
     });
     setTasks((prev) => [...prev, created]);
@@ -145,7 +147,24 @@ export function Board() {
     <div className="flex h-full flex-col">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <div>
-          <h1 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Task Board</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Task Board</h1>
+            <nav className="flex items-center gap-1 rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-900">
+              {WORKSPACES.map((ws) => (
+                <Link
+                  key={ws.id}
+                  href={`/${WORKSPACE_TO_SLUG[ws.id]}`}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
+                    ws.id === workspace
+                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
+                      : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  {ws.label}
+                </Link>
+              ))}
+            </nav>
+          </div>
           {weekStart ? (
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               {formatWeekLabel(parseCalendarDateString(weekStart))}
@@ -155,7 +174,7 @@ export function Board() {
         <div className="flex items-center gap-3">
           <ThemeToggle />
           <Link
-            href="/archive"
+            href={`/${WORKSPACE_TO_SLUG[workspace]}/archive`}
             className="text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
           >
             Archive

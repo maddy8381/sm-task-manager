@@ -1,5 +1,6 @@
 export type TaskStatusValue = "TODO" | "IN_PROGRESS" | "DONE";
 export type TaskPriorityValue = "LOW" | "MEDIUM" | "HIGH";
+export type WorkspaceValue = "JOB" | "PERSONAL";
 
 export type Task = {
   id: string;
@@ -8,9 +9,15 @@ export type Task = {
   status: TaskStatusValue;
   priority: TaskPriorityValue;
   labels: string[];
+  workspace: WorkspaceValue;
   day: string; // yyyy-MM-dd
   weekStart: string; // yyyy-MM-dd
 };
+
+export const WORKSPACES: { id: WorkspaceValue; label: string }[] = [
+  { id: "JOB", label: "Job" },
+  { id: "PERSONAL", label: "Personal" },
+];
 
 export const STATUS_COLUMNS: { id: TaskStatusValue; label: string }[] = [
   { id: "TODO", label: "To Do" },

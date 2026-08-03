@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getWeekStart, parseCalendarDateString, toCalendarDateString } from "@/lib/week";
+import { VALID_WORKSPACES } from "@/lib/task-input";
+import { Workspace } from "@/generated/prisma/client";
 
 export async function GET(request: NextRequest) {
   const todayParam = request.nextUrl.searchParams.get("today");
   if (!todayParam) {
     return NextResponse.json({ error: "Missing 'today' query param (yyyy-MM-dd)" }, { status: 400 });
   }
+  const workspaceParam = request.nextUrl.searchParams.get("workspace");
+  if (!workspaceParam || !VALID_WORKSPACES.includes(workspaceParam)) {
+    return NextResponse.json({ error: "Missing or invalid 'workspace' query param" }, { status: 400 });
+  }
+  const workspace = workspaceParam as Workspace;
 
   let today: Date;
   try {
@@ -18,7 +25,7 @@ export async function GET(request: NextRequest) {
   const currentWeekStart = getWeekStart(today);
 
   const rows = await prisma.task.findMany({
-    where: { weekStart: { lt: currentWeekStart } },
+    where: { weekStart: { lt: currentWeekStart }, workspace },
     select: { weekStart: true, status: true },
   });
 

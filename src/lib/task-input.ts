@@ -1,7 +1,8 @@
-import { TaskPriority, TaskStatus } from "@/generated/prisma/client";
+import { TaskPriority, TaskStatus, Workspace } from "@/generated/prisma/client";
 
 export const VALID_STATUSES: string[] = Object.values(TaskStatus);
 export const VALID_PRIORITIES: string[] = Object.values(TaskPriority);
+export const VALID_WORKSPACES: string[] = Object.values(Workspace);
 
 const MAX_LABELS = 8;
 const MAX_LABEL_LENGTH = 24;

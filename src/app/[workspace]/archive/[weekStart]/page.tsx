@@ -3,11 +3,18 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { serializeTask } from "@/lib/serialize";
 import { formatWeekLabel, getDaysOfWeek, parseCalendarDateString } from "@/lib/week";
+import { parseWorkspaceSlug } from "@/lib/workspace";
 import { Column } from "@/components/Column";
-import { STATUS_COLUMNS, type Task, type TaskStatusValue } from "@/types";
+import { STATUS_COLUMNS, WORKSPACES, type Task, type TaskStatusValue } from "@/types";
 
-export default async function ArchiveWeekPage({ params }: { params: Promise<{ weekStart: string }> }) {
-  const { weekStart } = await params;
+export default async function ArchiveWeekPage({
+  params,
+}: {
+  params: Promise<{ workspace: string; weekStart: string }>;
+}) {
+  const { workspace: slug, weekStart } = await params;
+  const workspace = parseWorkspaceSlug(slug);
+  if (!workspace) notFound();
 
   let weekStartDate: Date;
   try {
@@ -17,7 +24,7 @@ export default async function ArchiveWeekPage({ params }: { params: Promise<{ we
   }
 
   const rows = await prisma.task.findMany({
-    where: { weekStart: weekStartDate },
+    where: { weekStart: weekStartDate, workspace },
     orderBy: { createdAt: "asc" },
   });
 
@@ -27,6 +34,7 @@ export default async function ArchiveWeekPage({ params }: { params: Promise<{ we
 
   const tasks: Task[] = rows.map(serializeTask) as Task[];
   const days = getDaysOfWeek(weekStartDate);
+  const workspaceLabel = WORKSPACES.find((ws) => ws.id === workspace)?.label ?? workspace;
 
   const tasksByStatus = new Map<TaskStatusValue, Map<string, Task[]>>();
   for (const col of STATUS_COLUMNS) tasksByStatus.set(col.id, new Map());
@@ -42,17 +50,17 @@ export default async function ArchiveWeekPage({ params }: { params: Promise<{ we
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
         <div>
           <h1 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{formatWeekLabel(weekStartDate)}</h1>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Archived week (read-only)</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">{workspaceLabel} · Archived week (read-only)</p>
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href="/archive"
+            href={`/${slug}/archive`}
             className="text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
           >
             All weeks
           </Link>
           <Link
-            href="/"
+            href={`/${slug}`}
             className="text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
           >
             Back to board
