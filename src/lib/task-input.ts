@@ -1,8 +1,25 @@
 import { TaskPriority, TaskStatus, Workspace } from "@/generated/prisma/client";
+import { getWeekStart, parseCalendarDateString } from "@/lib/week";
 
 export const VALID_STATUSES: string[] = Object.values(TaskStatus);
 export const VALID_PRIORITIES: string[] = Object.values(TaskPriority);
 export const VALID_WORKSPACES: string[] = Object.values(Workspace);
+
+/**
+ * A task's `day` is either a "yyyy-MM-dd" string or explicit `null` (Backlog —
+ * only valid for To Do tasks). Returns "invalid" if the shape doesn't match
+ * either, so callers can 400 without needing their own type-narrowing.
+ */
+export function parseDayField(value: unknown): { day: Date | null; weekStart: Date | null } | "invalid" {
+  if (value === null) return { day: null, weekStart: null };
+  if (typeof value !== "string") return "invalid";
+  try {
+    const day = parseCalendarDateString(value);
+    return { day, weekStart: getWeekStart(day) };
+  } catch {
+    return "invalid";
+  }
+}
 
 const MAX_LABELS = 8;
 const MAX_LABEL_LENGTH = 24;

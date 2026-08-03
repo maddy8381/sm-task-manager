@@ -15,7 +15,7 @@ export function DayGroup({
   interactive = true,
 }: {
   status: TaskStatusValue;
-  day: string;
+  day: string | null;
   heading: string;
   isToday: boolean;
   tasks: Task[];
@@ -24,7 +24,7 @@ export function DayGroup({
   interactive?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({
-    id: `${status}|${day}`,
+    id: `${status}|${day ?? "backlog"}`,
     data: { status, day },
     disabled: !interactive,
   });

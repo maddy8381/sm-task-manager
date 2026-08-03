@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   DragOverlay,
@@ -16,6 +17,7 @@ import { TaskCard } from "@/components/TaskCard";
 import { TaskModal, type TaskFormValues } from "@/components/TaskModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { createTask, deleteTask, fetchCurrentWeek, updateTask } from "@/lib/api";
+import { taskQueryKeys } from "@/lib/queries";
 import {
   formatDayHeading,
   formatWeekLabel,
@@ -28,32 +30,48 @@ import { WORKSPACE_TO_SLUG } from "@/lib/workspace";
 import { STATUS_COLUMNS, WORKSPACES, type Task, type TaskStatusValue, type WorkspaceValue } from "@/types";
 
 type ModalState =
-  | { mode: "create"; status: TaskStatusValue; day: string }
+  | { mode: "create"; status: TaskStatusValue; day: string | null }
   | { mode: "edit"; task: Task }
   | null;
 
+type CurrentWeekData = { weekStart: string; rolledOver: number; tasks: Task[] };
+
 export function Board({ workspace }: { workspace: WorkspaceValue }) {
   const [today, setToday] = useState<string | null>(null);
-  const [weekStart, setWeekStart] = useState<string | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
-  const [rolledOver, setRolledOver] = useState(0);
+  const [dismissedRolloverFor, setDismissedRolloverFor] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
+  const queryClient = useQueryClient();
+  const queryKey = taskQueryKeys.currentWeek(workspace);
+
+  const {
+    data,
+    isLoading,
+    error: queryError,
+  } = useQuery({
+    queryKey,
+    queryFn: () => fetchCurrentWeek(localTodayString(), workspace),
+  });
+
   useEffect(() => {
-    const t = localTodayString();
-    fetchCurrentWeek(t, workspace)
-      .then((res) => {
-        setToday(t);
-        setWeekStart(res.weekStart);
-        setTasks(res.tasks);
-        setRolledOver(res.rolledOver);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
-      .finally(() => setLoading(false));
-  }, [workspace]);
+    // One-time read of the browser's local clock — day boundaries must match
+    // the user's timezone, not whatever the server happened to render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setToday(localTodayString());
+  }, []);
+
+  const weekStart = data?.weekStart ?? null;
+  const tasks = useMemo(() => data?.tasks ?? [], [data]);
+  const rolloverKey = weekStart ? `${workspace}:${weekStart}` : null;
+  const rolledOver = rolloverKey && dismissedRolloverFor === rolloverKey ? 0 : (data?.rolledOver ?? 0);
+
+  function setTasksCache(updater: (prev: Task[]) => Task[]) {
+    queryClient.setQueryData<CurrentWeekData>(queryKey, (prev) =>
+      prev ? { ...prev, tasks: updater(prev.tasks) } : prev
+    );
+  }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -67,10 +85,13 @@ export function Board({ workspace }: { workspace: WorkspaceValue }) {
     [days]
   );
 
+  const backlogTasks = useMemo(() => tasks.filter((t) => t.day === null), [tasks]);
+
   const tasksByStatus = useMemo(() => {
     const map = new Map<TaskStatusValue, Map<string, Task[]>>();
     for (const col of STATUS_COLUMNS) map.set(col.id, new Map());
     for (const task of tasks) {
+      if (task.day === null) continue;
       const byDay = map.get(task.status)!;
       const list = byDay.get(task.day) ?? [];
       list.push(task);
@@ -88,18 +109,19 @@ export function Board({ workspace }: { workspace: WorkspaceValue }) {
     const { active, over } = event;
     if (!over) return;
     const task = active.data.current?.task as Task | undefined;
-    const target = over.data.current as { status: TaskStatusValue; day: string } | undefined;
+    const target = over.data.current as { status: TaskStatusValue; day: string | null } | undefined;
     if (!task || !target) return;
     if (task.status === target.status && task.day === target.day) return;
 
-    const previous = tasks;
-    setTasks((prev) =>
+    setTasksCache((prev) =>
       prev.map((t) => (t.id === task.id ? { ...t, status: target.status, day: target.day } : t))
     );
     try {
       await updateTask(task.id, { status: target.status, day: target.day });
     } catch (err) {
-      setTasks(previous);
+      setTasksCache((prev) =>
+        prev.map((t) => (t.id === task.id ? { ...t, status: task.status, day: task.day } : t))
+      );
       setError(err instanceof Error ? err.message : "Failed to move task");
     }
   }
@@ -114,7 +136,7 @@ export function Board({ workspace }: { workspace: WorkspaceValue }) {
       workspace,
       day: values.day,
     });
-    setTasks((prev) => [...prev, created]);
+    setTasksCache((prev) => [...prev, created]);
     setModal(null);
   }
 
@@ -127,17 +149,25 @@ export function Board({ workspace }: { workspace: WorkspaceValue }) {
       labels: values.labels,
       day: values.day,
     });
-    setTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    setTasksCache((prev) => prev.map((t) => (t.id === id ? updated : t)));
     setModal(null);
   }
 
   async function handleDelete(id: string) {
     await deleteTask(id);
-    setTasks((prev) => prev.filter((t) => t.id !== id));
+    setTasksCache((prev) => prev.filter((t) => t.id !== id));
     setModal(null);
   }
 
-  if (loading) {
+  function prefetchWorkspace(target: WorkspaceValue) {
+    if (target === workspace) return;
+    queryClient.prefetchQuery({
+      queryKey: taskQueryKeys.currentWeek(target),
+      queryFn: () => fetchCurrentWeek(localTodayString(), target),
+    });
+  }
+
+  if (isLoading || !today) {
     return (
       <div className="flex flex-1 items-center justify-center p-8 text-sm text-zinc-400">Loading board…</div>
     );
@@ -154,6 +184,7 @@ export function Board({ workspace }: { workspace: WorkspaceValue }) {
                 <Link
                   key={ws.id}
                   href={`/${WORKSPACE_TO_SLUG[ws.id]}`}
+                  onMouseEnter={() => prefetchWorkspace(ws.id)}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
                     ws.id === workspace
                       ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
@@ -197,7 +228,7 @@ export function Board({ workspace }: { workspace: WorkspaceValue }) {
           </span>
           <button
             type="button"
-            onClick={() => setRolledOver(0)}
+            onClick={() => rolloverKey && setDismissedRolloverFor(rolloverKey)}
             className="font-medium text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100"
           >
             Dismiss
@@ -205,9 +236,9 @@ export function Board({ workspace }: { workspace: WorkspaceValue }) {
         </div>
       ) : null}
 
-      {error ? (
+      {error || queryError ? (
         <div className="flex items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-          <span>{error}</span>
+          <span>{error ?? (queryError instanceof Error ? queryError.message : "Failed to load")}</span>
           <button type="button" onClick={() => setError(null)} className="font-medium hover:underline">
             Dismiss
           </button>
@@ -224,8 +255,10 @@ export function Board({ workspace }: { workspace: WorkspaceValue }) {
               days={days}
               todayKey={today ?? ""}
               tasksByDay={tasksByStatus.get(col.id) ?? new Map()}
+              backlogTasks={col.id === "TODO" ? backlogTasks : undefined}
               onTaskClick={(task) => setModal({ mode: "edit", task })}
               onAddClick={(status, day) => setModal({ mode: "create", status, day })}
+              onBacklogAddClick={() => setModal({ mode: "create", status: "TODO", day: null })}
             />
           ))}
         </div>

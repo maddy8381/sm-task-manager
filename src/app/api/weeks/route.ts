@@ -31,7 +31,8 @@ export async function GET(request: NextRequest) {
 
   const byWeek = new Map<string, { total: number; done: number }>();
   for (const row of rows) {
-    const key = toCalendarDateString(row.weekStart);
+    // The `lt` filter above can only match non-null weekStart values.
+    const key = toCalendarDateString(row.weekStart!);
     const entry = byWeek.get(key) ?? { total: 0, done: 0 };
     entry.total += 1;
     if (row.status === "DONE") entry.done += 1;

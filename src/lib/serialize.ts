@@ -8,8 +8,8 @@ export type SerializedTask = {
   priority: string;
   labels: string[];
   workspace: string;
-  day: string;
-  weekStart: string;
+  day: string | null;
+  weekStart: string | null;
 };
 
 export function serializeTask(task: {
@@ -20,8 +20,8 @@ export function serializeTask(task: {
   priority: string;
   labels: string[];
   workspace: string;
-  day: Date;
-  weekStart: Date;
+  day: Date | null;
+  weekStart: Date | null;
 }): SerializedTask {
   return {
     id: task.id,
@@ -31,7 +31,7 @@ export function serializeTask(task: {
     priority: task.priority,
     labels: task.labels,
     workspace: task.workspace,
-    day: toCalendarDateString(task.day),
-    weekStart: toCalendarDateString(task.weekStart),
+    day: task.day ? toCalendarDateString(task.day) : null,
+    weekStart: task.weekStart ? toCalendarDateString(task.weekStart) : null,
   };
 }

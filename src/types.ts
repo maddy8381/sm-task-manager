@@ -10,8 +10,8 @@ export type Task = {
   priority: TaskPriorityValue;
   labels: string[];
   workspace: WorkspaceValue;
-  day: string; // yyyy-MM-dd
-  weekStart: string; // yyyy-MM-dd
+  day: string | null; // yyyy-MM-dd, null = Backlog (To Do only, unscheduled)
+  weekStart: string | null; // yyyy-MM-dd
 };
 
 export const WORKSPACES: { id: WorkspaceValue; label: string }[] = [

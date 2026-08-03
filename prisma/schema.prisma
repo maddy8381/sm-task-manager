@@ -42,11 +42,14 @@ model Task {
   workspace Workspace @default(JOB)
 
   // The specific calendar date this task is assigned to (day-section on the board).
-  day DateTime @db.Date
+  // Null means the task is in the Backlog — unscheduled, To Do only, not tied
+  // to any week until it's dragged onto a day.
+  day DateTime? @db.Date
 
   // Monday of the week `day` falls in. Tasks are grouped/archived by this field
-  // so a past week's Done tasks stay put once the current week moves on.
-  weekStart DateTime @db.Date
+  // so a past week's Done tasks stay put once the current week moves on. Null
+  // in lockstep with `day` for backlog tasks.
+  weekStart DateTime? @db.Date
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -23,7 +23,7 @@ export async function createTask(input: {
   priority: TaskPriorityValue;
   labels: string[];
   workspace: WorkspaceValue;
-  day: string;
+  day: string | null;
 }): Promise<Task> {
   const res = await fetch("/api/tasks", {
     method: "POST",
@@ -41,7 +41,7 @@ export async function updateTask(
     status: TaskStatusValue;
     priority: TaskPriorityValue;
     labels: string[];
-    day: string;
+    day: string | null;
   }>
 ): Promise<Task> {
   const res = await fetch(`/api/tasks/${id}`, {

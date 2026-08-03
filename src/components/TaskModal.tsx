@@ -9,7 +9,7 @@ export type TaskFormValues = {
   status: TaskStatusValue;
   priority: TaskPriorityValue;
   labels: string[];
-  day: string;
+  day: string | null; // null = Backlog (To Do only)
 };
 
 const inputClass =
@@ -63,6 +63,10 @@ export function TaskModal({
     e.preventDefault();
     if (!values.title.trim()) {
       setError("Title is required");
+      return;
+    }
+    if (values.day === null && values.status !== "TODO") {
+      setError("Backlog tasks must stay in To Do — pick a day or switch the status");
       return;
     }
     setSubmitting(true);
@@ -131,7 +135,15 @@ export function TaskModal({
               <label className={labelClass}>Status</label>
               <select
                 value={values.status}
-                onChange={(e) => setValues((v) => ({ ...v, status: e.target.value as TaskStatusValue }))}
+                onChange={(e) => {
+                  const status = e.target.value as TaskStatusValue;
+                  setValues((v) => ({
+                    ...v,
+                    status,
+                    // Backlog only exists in To Do — leaving it needs a real day.
+                    day: status !== "TODO" && v.day === null ? (dayOptions[0]?.value ?? "") : v.day,
+                  }));
+                }}
                 className={inputClass}
               >
                 {STATUS_COLUMNS.map((c) => (
@@ -159,17 +171,38 @@ export function TaskModal({
 
           <div>
             <label className={labelClass}>Day</label>
-            <select
-              value={values.day}
-              onChange={(e) => setValues((v) => ({ ...v, day: e.target.value }))}
-              className={inputClass}
-            >
-              {dayOptions.map((d) => (
-                <option key={d.value} value={d.value}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
+            {values.status === "TODO" ? (
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                <input
+                  type="checkbox"
+                  checked={values.day === null}
+                  onChange={(e) =>
+                    setValues((v) => ({
+                      ...v,
+                      day: e.target.checked ? null : (dayOptions[0]?.value ?? ""),
+                    }))
+                  }
+                />
+                Backlog (no specific day)
+              </label>
+            ) : null}
+            {values.day === null ? (
+              <p className="rounded-md border border-dashed border-zinc-300 px-3 py-1.5 text-xs text-zinc-400 dark:border-zinc-700">
+                Sits in the Backlog until you drag it onto a day.
+              </p>
+            ) : (
+              <select
+                value={values.day}
+                onChange={(e) => setValues((v) => ({ ...v, day: e.target.value }))}
+                className={inputClass}
+              >
+                {dayOptions.map((d) => (
+                  <option key={d.value} value={d.value}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div>

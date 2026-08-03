@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rolloverStaleTasks } from "@/lib/rollover";
-import { getWeekStart, parseCalendarDateString, toCalendarDateString } from "@/lib/week";
+import { parseCalendarDateString, toCalendarDateString } from "@/lib/week";
 import { serializeTask } from "@/lib/serialize";
-import { normalizeLabels, VALID_PRIORITIES, VALID_STATUSES, VALID_WORKSPACES } from "@/lib/task-input";
+import { normalizeLabels, parseDayField, VALID_PRIORITIES, VALID_STATUSES, VALID_WORKSPACES } from "@/lib/task-input";
 import { TaskPriority, TaskStatus, Workspace } from "@/generated/prisma/client";
 
 function parseTodayParam(request: NextRequest): Date | null {
@@ -34,15 +34,21 @@ export async function GET(request: NextRequest) {
 
   const { currentWeekStart, rolledOver } = await rolloverStaleTasks(today);
 
-  const tasks = await prisma.task.findMany({
-    where: { weekStart: currentWeekStart, workspace },
-    orderBy: { createdAt: "asc" },
-  });
+  const [tasks, backlogTasks] = await Promise.all([
+    prisma.task.findMany({
+      where: { weekStart: currentWeekStart, workspace },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.task.findMany({
+      where: { workspace, day: null },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
 
   return NextResponse.json({
     weekStart: toCalendarDateString(currentWeekStart),
     rolledOver,
-    tasks: tasks.map(serializeTask),
+    tasks: [...tasks, ...backlogTasks].map(serializeTask),
   });
 }
 
@@ -57,8 +63,11 @@ export async function POST(request: NextRequest) {
   if (typeof title !== "string" || !title.trim()) {
     return NextResponse.json({ error: "title is required" }, { status: 400 });
   }
-  if (typeof day !== "string") {
-    return NextResponse.json({ error: "day is required (yyyy-MM-dd)" }, { status: 400 });
+  if (day === undefined) {
+    return NextResponse.json(
+      { error: "day is required (yyyy-MM-dd, or null for the Backlog)" },
+      { status: 400 }
+    );
   }
   if (typeof workspace !== "string" || !VALID_WORKSPACES.includes(workspace)) {
     return NextResponse.json({ error: "invalid workspace" }, { status: 400 });
@@ -74,23 +83,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid labels" }, { status: 400 });
   }
 
-  let dayDate: Date;
-  try {
-    dayDate = parseCalendarDateString(day);
-  } catch {
+  const parsedDay = parseDayField(day);
+  if (parsedDay === "invalid") {
     return NextResponse.json({ error: "invalid day" }, { status: 400 });
+  }
+  const effectiveStatus = (status as TaskStatus) ?? TaskStatus.TODO;
+  if (parsedDay.day === null && effectiveStatus !== TaskStatus.TODO) {
+    return NextResponse.json(
+      { error: "day is required unless status is To Do (Backlog is To Do only)" },
+      { status: 400 }
+    );
   }
 
   const task = await prisma.task.create({
     data: {
       title: title.trim(),
       description: typeof description === "string" && description.trim() ? description.trim() : null,
-      status: (status as TaskStatus) ?? TaskStatus.TODO,
+      status: effectiveStatus,
       priority: (priority as TaskPriority) ?? TaskPriority.MEDIUM,
       labels: normalizedLabels,
       workspace: workspace as Workspace,
-      day: dayDate,
-      weekStart: getWeekStart(dayDate),
+      day: parsedDay.day,
+      weekStart: parsedDay.weekStart,
     },
   });
 

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getWeekStart, parseCalendarDateString } from "@/lib/week";
 import { serializeTask } from "@/lib/serialize";
-import { normalizeLabels, VALID_PRIORITIES, VALID_STATUSES } from "@/lib/task-input";
+import { normalizeLabels, parseDayField, VALID_PRIORITIES, VALID_STATUSES } from "@/lib/task-input";
 import { TaskPriority, TaskStatus } from "@/generated/prisma/client";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -14,14 +13,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
   const input = body as Record<string, unknown>;
 
+  const current = await prisma.task.findUnique({ where: { id } });
+  if (!current) {
+    return NextResponse.json({ error: "task not found" }, { status: 404 });
+  }
+
   const data: {
     title?: string;
     description?: string | null;
     status?: TaskStatus;
     priority?: TaskPriority;
     labels?: string[];
-    day?: Date;
-    weekStart?: Date;
+    day?: Date | null;
+    weekStart?: Date | null;
   } = {};
 
   if (input.title !== undefined) {
@@ -59,17 +63,21 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   if (input.day !== undefined) {
-    if (typeof input.day !== "string") {
+    const parsedDay = parseDayField(input.day);
+    if (parsedDay === "invalid") {
       return NextResponse.json({ error: "invalid day" }, { status: 400 });
     }
-    let dayDate: Date;
-    try {
-      dayDate = parseCalendarDateString(input.day);
-    } catch {
-      return NextResponse.json({ error: "invalid day" }, { status: 400 });
-    }
-    data.day = dayDate;
-    data.weekStart = getWeekStart(dayDate);
+    data.day = parsedDay.day;
+    data.weekStart = parsedDay.weekStart;
+  }
+
+  const effectiveStatus = data.status ?? current.status;
+  const effectiveDay = input.day !== undefined ? data.day : current.day;
+  if (effectiveDay === null && effectiveStatus !== TaskStatus.TODO) {
+    return NextResponse.json(
+      { error: "day is required unless status is To Do (Backlog is To Do only)" },
+      { status: 400 }
+    );
   }
 
   try {

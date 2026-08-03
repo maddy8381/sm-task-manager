@@ -11,8 +11,10 @@ export function Column({
   days,
   todayKey,
   tasksByDay,
+  backlogTasks,
   onTaskClick,
   onAddClick,
+  onBacklogAddClick,
   interactive = true,
 }: {
   status: TaskStatusValue;
@@ -20,11 +22,14 @@ export function Column({
   days: Date[];
   todayKey: string;
   tasksByDay: Map<string, Task[]>;
+  backlogTasks?: Task[];
   onTaskClick?: (task: Task) => void;
   onAddClick?: (status: TaskStatusValue, day: string) => void;
+  onBacklogAddClick?: () => void;
   interactive?: boolean;
 }) {
-  const total = Array.from(tasksByDay.values()).reduce((sum, list) => sum + list.length, 0);
+  const total =
+    Array.from(tasksByDay.values()).reduce((sum, list) => sum + list.length, 0) + (backlogTasks?.length ?? 0);
   const style = STATUS_STYLES[status];
 
   return (
@@ -36,6 +41,20 @@ export function Column({
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${style.count}`}>{total}</span>
       </div>
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 pb-3">
+        {backlogTasks ? (
+          <div className="mb-1.5 rounded-lg border border-dashed border-zinc-300 dark:border-zinc-700">
+            <DayGroup
+              status={status}
+              day={null}
+              heading="Backlog"
+              isToday={false}
+              tasks={backlogTasks}
+              onTaskClick={onTaskClick}
+              onAddClick={onBacklogAddClick}
+              interactive={interactive}
+            />
+          </div>
+        ) : null}
         {days.map((date) => {
           const key = toCalendarDateString(date);
           return (

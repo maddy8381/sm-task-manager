@@ -39,10 +39,13 @@ export default async function ArchiveWeekPage({
   const tasksByStatus = new Map<TaskStatusValue, Map<string, Task[]>>();
   for (const col of STATUS_COLUMNS) tasksByStatus.set(col.id, new Map());
   for (const task of tasks) {
+    // Backlog tasks (day === null) never have a weekStart, so they can't have
+    // matched the `weekStart: weekStartDate` query above.
+    const day = task.day!;
     const byDay = tasksByStatus.get(task.status)!;
-    const list = byDay.get(task.day) ?? [];
+    const list = byDay.get(day) ?? [];
     list.push(task);
-    byDay.set(task.day, list);
+    byDay.set(day, list);
   }
 
   return (
