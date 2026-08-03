@@ -2,9 +2,11 @@
 
 A personal, Jira-style weekly kanban board. Three status columns (To Do / In
 Progress / Done), each split into Mon–Sun day-sections with today pinned to
-the top. When a week ends, unfinished tasks roll forward into the new week
-automatically, and finished weeks become permanent, browsable archives under
-`/archive`.
+the top. Tasks carry a priority (color-coded stripe) and free-form labels.
+When a week ends, unfinished tasks roll forward into the new week
+automatically (with a banner telling you what moved), and finished weeks
+become permanent, browsable archives under `/archive`. Light/dark theme
+toggle included.
 
 ## Stack
 
@@ -58,7 +60,7 @@ they are, which is what makes a past week's archive permanent — visit
 
 ## Project structure
 
-- `prisma/schema.prisma` — the `Task` model (title, description, status, day, weekStart)
+- `prisma/schema.prisma` — the `Task` model (title, description, status, priority, labels, day, weekStart)
 - `src/lib/week.ts` — UTC-safe calendar-date math shared by client and server
 - `src/lib/rollover.ts` — the lazy week-rollover logic described above
 - `src/app/api/tasks`, `src/app/api/weeks` — REST-ish route handlers
