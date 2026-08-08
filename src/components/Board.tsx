@@ -225,8 +225,7 @@ export function Board({ workspace }: { workspace: WorkspaceValue }) {
       {rolledOver > 0 ? (
         <div className="flex items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <span>
-            {rolledOver} unfinished {rolledOver === 1 ? "task was" : "tasks were"} rolled over from last week into
-            today.
+            {rolledOver} unfinished {rolledOver === 1 ? "task was" : "tasks were"} rolled over into today.
           </span>
           <button
             type="button"
